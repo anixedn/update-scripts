@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ $(id -u) != 0 ]; then
+	echo "please run as root.";
+else
+	grub-mkconfig -o /boot/grub/grub.cfg;
+fi
