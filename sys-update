@@ -31,14 +31,14 @@ done
 emerge --depclean
 
 read -p "upgrade kernel? [y/N]: " KERN
-read -p "jobs? " JOBS
 while true; do
     case $KERN in
-	Yy)
+	'Y' | 'y')
+	    read -p "jobs? " JOBS;
 	    cd /usr/src/linux; cp ../linux-$(uname -r)/.config .;
 	    make menuconfig; make -j$JOBS; make modules_install; make install;
 	    grub-mkconfig -o /boot/grub/grub.cfg; break;;
-	Nn)
+	'N' | 'n')
 	    break;;
 	*)
 	    echo "not understood."; break;;
