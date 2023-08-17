@@ -1,1 +1,4 @@
-Personal [newbie] bash-scripts for updating my Gentoo Linux system + script for easy grub updating.
+sh-scripts, that I use for updating my Gentoo Linux system
+contains:
+ - package upgrade (+kernel) script;
+ - grub update script;
