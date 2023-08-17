@@ -1,54 +1,60 @@
 #!/bin/bash
+# Check if run as root
 if [ $(id -u) != 0 ]; then
-    echo "please run as root."; exit
+  echo "please run as root."; exit
 fi
 
-read -p "partition? " PARTITION
-mount /dev/$PARTITION /boot
-
+# Ask for sync
 read -p "sync? [Y/n]: " SYNC
 while true; do
-    case $SYNC in
-	'Y' | 'y')
-	    emerge --sync; break;;
-	'N' | 'n')
-	    break;;
-	*)
-	    echo "not understood."; break;;
-    esac
+  case $SYNC in
+    [yY][eE][sS])
+      emerge --sync; break;;
+    [nN][oO])
+      break;;
+    *)
+      exit;;
+  esac
 done
 
-emerge -puvDN --quiet-build @world
+# Check for new version of portage
+echo "Checking for portage upgrade..."
+UPDPORTAGE="$(emerge -pv sys-apps/portage | grep -w -c 'U')"
+if [ $UPDPORTAGE -eq 1 ]; then
+  emerge -1v sys-apps/portage
+fi
+
+# Upgrading @world
+emerge -puvDN --quiet-build @world | less
 read -p "extra options? [*/n]: " EXTRA
 while true; do
-    case $EXTRA in
-	'N' | 'n')
-	    emerge -uvDN --quiet-build @world; break;;
-	*)
-	    emerge -uvDN --quiet-build $EXTRA @world; break;;
-    esac
+  case $EXTRA in
+    [nN][oO])
+      emerge -uvDN --quiet-build @world; break;;
+    *)
+      emerge -uvDN --quiet-build $EXTRA @world; break;;
+  esac
 done
 emerge --depclean
 
-read -p "upgrade kernel? [y/N]: " KERN
-while true; do
-    case $KERN in
-	'Y' | 'y')
-	    read -p "jobs? " JOBS;
-	    cd /usr/src/linux; cp ../linux-$(uname -r)/.config .;
-	    make menuconfig; make -j$JOBS; make modules_install; make install;
-	    grub-mkconfig -o /boot/grub/grub.cfg; break;;
-	'N' | 'n')
-	    break;;
-	*)
-	    echo "not understood."; break;;
-    esac
-done
+# Kernel package to upgrade
+KERNPKG="gentoo-sources"
+# Ask for kernel upgrade
+KERNUPG="$(emerge -pv sys-kernel/$KERNPKG | grep -w -c 'U')"
+case $KERNUPG in
+  1)
+    JOBS="$(cat /etc/portage/make.conf | grep "MAKE_OPTS" | sed 's/.*s*="//' | sed 's/"//')"
+    cd /usr/src/linux; cp ../linux-$(uname -r)/.config .;
+    make menuconfig; make $JOBS; make modules_install; make install;
+    grub-mkconfig -o /boot/grub/grub.cfg;
+    emerge --quiet-build @module-rebuild; break;;
+  *)
+    exit;;
+esac
 
-emerge --quiet-build @module-rebuild
 read -p "reboot? " REBOOT
-if [ $REBOOT == Yy ]; then
-    reboot;
-else
-    exit;
-fi
+case $REBOOT in
+  [yY][eE][ss])
+    reboot;;
+  *) exit;;
+esac
