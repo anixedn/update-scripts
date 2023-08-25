@@ -1,60 +1,74 @@
 #!/bin/bash
-# Check if run as root
-if [ $(id -u) != 0 ]; then
-  echo "please run as root."; exit
-fi
+# Default options for progress windows
+PROPTS="--auto-close --auto-kill --pulsate"
+export SUDO_ASKPASS="/usr/local/bin/askpassw.sh"
+SU="sudo -A"
+# Info about building current package
+CURRENTPKG="`$SU genlop -c | sed -n '4p'`"
+# Info about estimated time
+ETIME="`$SU genlop -c | sed -n '7p'`"
 
-# Ask for sync
-read -p "sync? [Y/n]: " SYNC
-while true; do
-  case $SYNC in
-    [yY][eE][sS])
-      emerge --sync; break;;
-    [nN][oO])
-      break;;
-    *)
-      exit;;
-  esac
-done
+# Sync repositories
+repos_sync() {
+  $SU emerge --sync --ask=n
+}
 
-# Check for new version of portage
-echo "Checking for portage upgrade..."
-UPDPORTAGE="$(emerge -pv sys-apps/portage | grep -w -c 'U')"
-if [ $UPDPORTAGE -eq 1 ]; then
-  emerge -1v sys-apps/portage
-fi
+# Check for new version and upgrade Portage
+check_portage() {
+  UPDPORTAGE="$(emerge -pv sys-apps/portage | grep -w -c 'U')"
+}
+upgrade_portage() {
+  $SU emerge -1v --ask=n sys-apps/portage
+}
 
-# Upgrading @world
-emerge -puvDN --quiet-build @world | less
-read -p "extra options? [*/n]: " EXTRA
-while true; do
-  case $EXTRA in
-    [nN][oO])
-      emerge -uvDN --quiet-build @world; break;;
-    *)
-      emerge -uvDN --quiet-build $EXTRA @world; break;;
-  esac
-done
-emerge --depclean
+# Checking and upgrading @world
+check_world() {
+  emerge -puvDN @world
+}
+upgrade_world() {
+  $SU emerge -uvDN --quiet-build --ask=n @world
+}
+clean_deps() {
+  $SU emerge --depclean --ask=n > $HOME/depclean.log
+}
 
 # Kernel package to upgrade
 KERNPKG="gentoo-sources"
-# Ask for kernel upgrade
-KERNUPG="$(emerge -pv sys-kernel/$KERNPKG | grep -w -c 'U')"
+# Check a new version of kernel
+check_kern() {
+  KERNUPG="$(emerge -pv sys-kernel/$KERNPKG | grep -w -c 'U')"
+}
+kern_upgrade() {
+    JOBS="$(cat /etc/portage/make.conf | grep "MAKE_OPTS" | sed 's/.*s*="//' | sed 's/"//')"
+    cd /usr/src/linux; $SU cp ../linux-$(uname -r)/.config .
+    $SU `make menuconfig; make $JOBS; make modules_install; make install`
+    $SU grub-mkconfig -o /boot/grub/grub.cfg
+    $SU emerge --quiet-build @module-rebuild
+}
+
+reboot_sys() {
+  sleep 5 && $SU reboot | zenity --info --title="Перезавантаження" --text="Перевазантажуємо систему через 5 секунд.."
+}
+
+repos_sync | zenity --progress $PROPTS --title="Оновлення репозиторіїв" --text="Оновлюємо базу даних пакунків..."
+
+check_portage | zenity --progress $PROPTS --title="Перевірка оновлення для Portage" --text="Перевіряємо оновлення для керівника пакетів..."
+if [ $UPDPORTAGE -eq 1 ]; then
+   upgrade_portage | zenity --progress $PROPTS --title="Оновлення для Portage" --text="Доступна нова версія,встановлюємо..."
+else
+  zenity --info --text "Установлена остання версія."
+fi
+
+check_world | zenity --progress $PROPTS --title="Перевірка оновлень для пакунків" --text="Перевіряємо оновлення для пакунків..."
+upgrade_world | zenity --progress $PROPTS --title="$CURRENTPKG $ETIME" --text="Оновлюємо пакунки..."
+clean_deps | zenity --progress $PROPTS --title="Чистка" --text="Чистимо зайве..."
+
+check_kern | zenity --progress $PROPTS --title="Перевірка оновлення ядра" --text="Перевіряємо оновлення ядра..."
 case $KERNUPG in
   1)
-    JOBS="$(cat /etc/portage/make.conf | grep "MAKE_OPTS" | sed 's/.*s*="//' | sed 's/"//')"
-    cd /usr/src/linux; cp ../linux-$(uname -r)/.config .;
-    make menuconfig; make $JOBS; make modules_install; make install;
-    grub-mkconfig -o /boot/grub/grub.cfg;
-    emerge --quiet-build @module-rebuild; break;;
+    kern_upgrade | zenity --progress $PROPTS --title="Оновлення ядра" --text="Оновлюємо ядро..."
+    reboot_sys;;
   *)
-    exit;;
-esac
-
-read -p "reboot? " REBOOT
-case $REBOOT in
-  [yY][eE][ss])
-    reboot;;
-  *) exit;;
+    zenity --info --text="Оновлення завершено."
+    reboot_sys;;
 esac

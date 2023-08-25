@@ -1,10 +1,8 @@
 #!/bin/bash
-# Check if run as root
 if [ $(id -u) != 0 ]; then
   echo "please run as root."; exit
 fi
 
-# Ask for sync
 read -p "sync? [Y/n]: " SYNC
 while true; do
   case $SYNC in
@@ -17,15 +15,15 @@ while true; do
   esac
 done
 
-# Check for new version of portage
-echo "Checking for portage upgrade..."
-UPDPORTAGE="$(emerge -pv sys-apps/portage | grep -w -c 'U')"
+UPDPORTAGE="$(emerge -pv sys-apps/portage | grep -w -c "U")"
 if [ $UPDPORTAGE -eq 1 ]; then
   emerge -1v sys-apps/portage
 fi
 
-# Upgrading @world
-emerge -puvDN --quiet-build @world | less
+if [ $1 == "-n" ]; then
+  emerge -puvDN --quiet-build @world
+fi
+
 read -p "extra options? [*/n]: " EXTRA
 while true; do
   case $EXTRA in
@@ -36,25 +34,3 @@ while true; do
   esac
 done
 emerge --depclean
-
-# Kernel package to upgrade
-KERNPKG="gentoo-sources"
-# Ask for kernel upgrade
-KERNUPG="$(emerge -pv sys-kernel/$KERNPKG | grep -w -c 'U')"
-case $KERNUPG in
-  1)
-    JOBS="$(cat /etc/portage/make.conf | grep "MAKE_OPTS" | sed 's/.*s*="//' | sed 's/"//')"
-    cd /usr/src/linux; cp ../linux-$(uname -r)/.config .;
-    make menuconfig; make $JOBS; make modules_install; make install;
-    grub-mkconfig -o /boot/grub/grub.cfg;
-    emerge --quiet-build @module-rebuild; break;;
-  *)
-    exit;;
-esac
-
-read -p "reboot? " REBOOT
-case $REBOOT in
-  [yY][eE][ss])
-    reboot;;
-  *) exit;;
-esac

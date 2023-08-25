@@ -1,0 +1,17 @@
+#!/bin/bash
+if [ $(id -u) != 0 ]; then
+  echo "please run as root."; exit
+fi
+
+JOBS="$(cat /etc/portage/make.conf | grep "MAKE_OPTS" | sed 's/.*s*="//' | sed 's/"//')"
+cd /usr/src/linux && cp ../linux-$(uname -r)/.config .
+make menuconfig && make $JOBS && make modules_install && make install
+grub-mkconfig -o /boot/grub/grub.cfg
+
+emerge --quiet-build @module-rebuild
+read -p "reboot? " REBOOT
+case $REBOOT in
+  [yY][eE][ss])
+    reboot;;
+  *) exit;;
+esac
